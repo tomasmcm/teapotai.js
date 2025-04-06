@@ -5,7 +5,7 @@ describe('TeapotAI', () => {
   let teapot;
 
   beforeEach(async () => {
-    teapot = await TeapotAI.fromPretrained(undefined, {
+    teapot = await TeapotAI.fromPretrained({
       settings: {
         verbose: true
       }
@@ -33,7 +33,6 @@ describe('TeapotAI', () => {
   it('should use RAG for landmark questions', async () => {
     const documents = [
       "The Eiffel Tower is located in Paris, France. It was built in 1889 and stands 330 meters tall.",
-      "The Great Wall of China is a historic fortification that stretches over 13,000 miles.",
       "The Amazon Rainforest is the largest tropical rainforest in the world, covering over 5.5 million square kilometers.",
       "The Grand Canyon is a natural landmark located in Arizona, USA, carved by the Colorado River.",
       "Mount Everest is the tallest mountain on Earth, located in the Himalayas along the border between Nepal and China.",
@@ -43,7 +42,7 @@ describe('TeapotAI', () => {
       "The Empire State Building is an iconic skyscraper in New York City that was completed in 1931 and stands at 1454 feet tall."
     ];
 
-    const teapotWithDocs = await TeapotAI.fromPretrained(undefined, {
+    const teapotWithDocs = await TeapotAI.fromPretrained({
       documents,
       settings: { useRag: true, verbose: true }
     });
