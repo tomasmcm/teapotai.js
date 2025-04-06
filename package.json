@@ -1,0 +1,59 @@
+{
+  "name": "teapotai-js",
+  "version": "1.2.0",
+  "type": "module",
+  "exports": {
+    "types": "./types/teapotai.d.ts",
+    "node": {
+      "import": "./dist/teapotai.js",
+      "require": "./dist/teapotai.cjs"
+    },
+    "default": "./dist/teapotai.web.js"
+  },
+  "scripts": {
+    "build": "rm -rf dist types && rollup -c && tsc",
+    "format": "prettier --write . --print-width 1000",
+    "test": "vitest run"
+  },
+  "keywords": [
+    "teapotai",
+    "teapotllm",
+    "llm"
+  ],
+  "browser": {
+    "path": false,
+    "fs/promises": false
+  },
+  "contributors": [
+    "tomasmcm"
+  ],
+  "license": "Apache-2.0",
+  "description": "AI powered LLM agents, privately brewed in your browser.",
+  "dependencies": {
+    "@huggingface/transformers": "^3.4.2"
+  },
+  "devDependencies": {
+    "@rollup/plugin-node-resolve": "^16.0.0",
+    "@rollup/plugin-terser": "^0.4.4",
+    "prettier": "3.4.2",
+    "rollup": "^4.30.1",
+    "typescript": "^5.7.3",
+    "vitest": "^2.1.8"
+  },
+  "files": [
+    "types",
+    "dist",
+    "README.md",
+    "LICENSE"
+  ],
+  "homepage": "https://github.com/tomasmcm/teapotai.js",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tomasmcm/teapotai.js.git"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "jsdelivr": "./dist/teapotai.web.js",
+  "unpkg": "./dist/teapotai.web.js"
+}
