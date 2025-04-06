@@ -12,7 +12,7 @@ describe('TeapotAI', () => {
     });
   }, 0);
 
-  it.only('should get Eiffel Tower height with context', async () => {
+  it('should get Eiffel Tower height with context', async () => {
     const context = `
       The Eiffel Tower is a wrought iron lattice tower in Paris, France. It was designed by Gustave Eiffel and completed in 1889.
       It stands at a height of 330 meters and is one of the most recognizable structures in the world.
