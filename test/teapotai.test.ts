@@ -1,14 +1,18 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { TeapotAI } from '../src/teapotai.js';
+import { TeapotAI } from '../src/teapotai';
 
 describe('TeapotAI', () => {
   let teapot;
 
   beforeEach(async () => {
-    teapot = await TeapotAI.fromPretrained();
+    teapot = await TeapotAI.fromPretrained(undefined, {
+      settings: {
+        verbose: true
+      }
+    });
   }, 0);
 
-  it('should get Eiffel Tower height with context', async () => {
+  it.only('should get Eiffel Tower height with context', async () => {
     const context = `
       The Eiffel Tower is a wrought iron lattice tower in Paris, France. It was designed by Gustave Eiffel and completed in 1889.
       It stands at a height of 330 meters and is one of the most recognizable structures in the world.
@@ -41,7 +45,7 @@ describe('TeapotAI', () => {
 
     const teapotWithDocs = await TeapotAI.fromPretrained(undefined, {
       documents,
-      settings: { useRag: true }
+      settings: { useRag: true, verbose: true }
     });
     const response = await teapotWithDocs.chat([
       { role: "system", content: "You are an agent designed to answer facts about famous landmarks." },

@@ -1,4 +1,14 @@
-import { pipeline, env } from "@huggingface/transformers";
+import {
+  env,
+  pipeline,
+} from "@huggingface/transformers";
+import type {
+  FeatureExtractionPipeline,
+  Message,
+  ProgressInfo,
+  Text2TextGenerationPipeline,
+} from "@huggingface/transformers";
+import { cosineSimilarity } from "fast-cosine-similarity";
 
 const DEFAULT_MODEL = "tomasmcm/teapotai-teapotllm-onnx";
 const DEFAULT_SYSTEM_PROMPT = "You are Teapot, an open-source AI assistant optimized for low-end devices, providing short, accurate responses without hallucinating while excelling at information extraction and text summarization. If a user asks who you are reply \"I am Teapot\". When a user says 'you' they mean 'Teapot', so answer question from the perspective of Teapot.";
@@ -6,30 +16,54 @@ const DEFAULT_SYSTEM_PROMPT = "You are Teapot, an open-source AI assistant optim
 env.cacheDir = './.cache';
 
 /**
- * @typedef {Object} TeapotAISettings
- * @property {boolean} [useRag=true] Whether to use Retrieval Augmented Generation
- * @property {number} [ragNumResults=3] Number of top documents to retrieve based on similarity
- * @property {number} [ragSimilarityThreshold=0.5] Similarity threshold for document relevance
- * @property {number} [maxContextLength=512] Maximum length of context to consider
- * @property {boolean} [contextChunking=true] Whether to chunk context for processing
- * @property {boolean} [verbose=false] Whether to print verbose updates
- * @property {string} [logLevel="info"] Log level setting (e.g., 'info', 'debug')
+ * Settings for TeapotAI
  */
+interface TeapotAISettings {
+  useRag?: boolean;
+  ragNumResults?: number;
+  ragSimilarityThreshold?: number;
+  maxContextLength?: number;
+  contextChunking?: boolean;
+  verbose?: boolean;
+  logLevel?: string;
+}
 
 /**
- * @typedef {Object} ConversationMessage
- * @property {string} role The role of the message sender (e.g., 'user', 'assistant')
- * @property {string} content The content of the message
+ * Options for loading a pretrained model
  */
+interface PretrainedOptions {
+  documents?: string[];
+  settings?: TeapotAISettings;
+  dtype?: "q4" | "auto" | "fp32" | "fp16" | "q8" | "int8" | "uint8" | "bnb4" | "q4f16";
+  device?: "auto" | "gpu" | "cpu" | "wasm" | "webgpu" | "cuda" | "dml" | "webnn" | "webnn-npu" | "webnn-gpu" | "webnn-cpu";
+  progressCallback?: ((data: ProgressInfo) => void) | null;
+}
+
+/**
+ * Schema field definition for data extraction
+ */
+interface SchemaField {
+  type: string;
+  description?: string;
+}
+interface Schema {
+  [key: string]: SchemaField;
+}
 
 export class TeapotAI {
+  private model: Text2TextGenerationPipeline;
+  private documents: string[];
+  private settings: Required<TeapotAISettings>;
+  private embeddingModel?: FeatureExtractionPipeline;
+  private documentEmbeddings?: number[][];
+  
   /**
    * Create a new TeapotAI instance.
-   * @param {Object} model The model
-   * @param {string[]} [documents=[]] List of documents to use for context retrieval
-   * @param {TeapotAISettings} [settings={}] Settings for TeapotAI
+   * @param model The model
+   * @param documents List of documents to use for context retrieval
+   * @param settings Settings for TeapotAI
    */
-  constructor(model, documents = [], settings = {}) {
+  constructor(model: Text2TextGenerationPipeline, documents: string[] = [], settings: TeapotAISettings = {}) {
     this.model = model;
     this.documents = [];
     
@@ -51,7 +85,7 @@ export class TeapotAI {
 |_   _|__  __ _ _ __   ___ | |_      / \\  |_ _|   __ /-___-\\__/ /
   | |/ _ \\/ _\` | '_ \\ / _ \\| __|    / _ \\  | |   (  |       |__/
   | |  __/ (_| | |_) | (_) | |_    / ___ \\ | |    \\_|~~~~~~~|
-  |_|\\___|\\_,_| .__/ \\___/ \\__/  /_/   \\_\\___|      \\_____/
+  |_|\\___|\\_,__| .__/ \\___/ \\__/  /_/   \\_\\___|      \\_____/
                |_|   
 `);
     }
@@ -68,25 +102,20 @@ export class TeapotAI {
 
   /**
    * Load a TeapotAI model from the Hugging Face Hub.
-   * @param {string} [modelId=DEFAULT_MODEL] The model id
-   * @param {Object} [options={}] Additional options
-   * @param {string[]} [options.documents=[]] List of documents to use for context retrieval
-   * @param {TeapotAISettings} [options.settings={}] Settings for TeapotAI
-   * @param {"fp32"|"fp16"|"q8"|"q4"|"q4f16"} [options.dtype="fp32"] The data type to use.
-   * @param {"wasm"|"webgpu"|"cpu"|null} [options.device=null] The device to run the model on.
-   * @param {Function} [options.progressCallback=null] A callback function for progress information.
-   * @returns {Promise<TeapotAI>} The loaded model
+   * @param modelId The model id
+   * @param options Additional options
+   * @returns The loaded model
    */
   static async fromPretrained(
-    modelId = DEFAULT_MODEL, 
+    modelId: string = DEFAULT_MODEL, 
     { 
       documents = [], 
       settings = {}, 
       dtype = "q4", 
       device = null, 
       progressCallback = null 
-    } = {}
-  ) {
+    }: PretrainedOptions = {}
+  ): Promise<TeapotAI> {
     if (settings.verbose) {
       console.log("Loading model...");
     }
@@ -95,8 +124,8 @@ export class TeapotAI {
     const model = await pipeline("text2text-generation", modelId, { 
       dtype, 
       device,
-      // progress_callback: progressCallback 
-    });
+      progress_callback: progressCallback 
+    }) as unknown as Text2TextGenerationPipeline;
 
     // Initialize the embedding model if RAG is enabled
     const teapotAI = new TeapotAI(model, documents, settings);
@@ -112,12 +141,12 @@ export class TeapotAI {
    * Initialize the embedding pipeline for RAG functionality
    * @private
    */
-  async _initializeEmbeddings() {
+  private async _initializeEmbeddings(): Promise<void> {
     if (this.settings.verbose) {
       console.log("Initializing embedding model...");
     }
     
-    this.embeddingModel = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+    this.embeddingModel = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2") as unknown as FeatureExtractionPipeline;
     
     if (this.documents.length > 0) {
       this.documentEmbeddings = await this._generateDocumentEmbeddings(this.documents);
@@ -130,11 +159,10 @@ export class TeapotAI {
 
   /**
    * Split a document into smaller chunks if needed
-   * @private
-   * @param {string} context - The document to chunk
-   * @returns {string[]} List of document chunks
+   * @param context The document to chunk
+   * @returns List of document chunks
    */
-  _chunkDocument(context) {
+  private _chunkDocument(context: string): string[] {
     if (!this.settings.contextChunking) {
       return [context];
     }
@@ -148,7 +176,7 @@ export class TeapotAI {
 
     // Chunk by paragraphs
     const paragraphs = context.split('\n\n');
-    const documents = [];
+    const documents: string[] = [];
 
     for (const paragraph of paragraphs) {
       const tokens = this.model.tokenizer(paragraph).input_ids;
@@ -170,83 +198,47 @@ export class TeapotAI {
 
   /**
    * Generate embeddings for a list of documents
-   * @private
-   * @param {string[]} documents - The documents to embed
-   * @returns {Promise<Array<number[]>>} The document embeddings
+   * @param documents The documents to embed
+   * @returns The document embeddings
    */
-  async _generateDocumentEmbeddings(documents) {
+  private async _generateDocumentEmbeddings(documents: string[]): Promise<number[][]> {
     if (this.settings.verbose) {
       console.log(`Generating embeddings for ${documents.length} documents...`);
     }
     
-    const embeddings = [];
+    if (!this.embeddingModel) {
+      throw new Error('Embedding model not initialized');
+    }
+    
+    const embeddings: number[][] = [];
     
     for (const doc of documents) {
       const embedding = await this.embeddingModel(doc, { pooling: 'mean', normalize: true });
       // The embedding is returned as a Float32Array in the first position
-      embeddings.push(Array.from(embedding[0]));
+      embeddings.push(Array.from(embedding.data));
     }
     
     return embeddings;
   }
 
   /**
-   * Calculate cosine similarity between two vectors
-   * @private
-   * @param {number[]} vecA - First vector
-   * @param {number[]} vecB - Second vector
-   * @returns {number} Similarity score between 0 and 1
-   */
-  _cosineSimilarity(vecA, vecB) {
-    let dotProduct = 0.0;
-    let normA = 0.0;
-    let normB = 0.0;
-    
-    // Check if vectors are valid
-    if (!Array.isArray(vecA) || !Array.isArray(vecB) || vecA.length !== vecB.length) {
-      console.error('Invalid vectors for cosine similarity calculation');
-      return 0;
-    }
-
-    for (let i = 0; i < vecA.length; i++) {
-      // Handle potential NaN or undefined values
-      const a = Number(vecA[i]) || 0;
-      const b = Number(vecB[i]) || 0;
-      
-      dotProduct += a * b;
-      normA += a * a;
-      normB += b * b;
-    }
-    
-    // Prevent division by zero
-    const denominator = Math.sqrt(normA) * Math.sqrt(normB);
-    if (denominator === 0) {
-      return 0;
-    }
-    
-    const similarity = dotProduct / denominator;
-    
-    // Ensure the result is within [-1, 1] range
-    return Math.min(Math.max(similarity, -1), 1);
-  }
-
-  /**
    * Retrieve relevant documents based on a query
-   * @private
-   * @param {string} query - The query to retrieve documents for
-   * @param {string[]} documents - The documents to search
-   * @param {Array<number[]>} documentEmbeddings - The embeddings for each document
-   * @returns {Promise<string[]>} List of relevant documents
+   * @param query The query to retrieve documents for
+   * @param documents The documents to search
+   * @param documentEmbeddings The embeddings for each document
+   * @returns List of relevant documents
    */
-  async _retrieval(query, documents, documentEmbeddings) {
-    const queryEmbedding = await this.embeddingModel(query, { pooling: 'mean', normalize: true });
+  private async _retrieval(query: string, documents: string[], documentEmbeddings: number[][]): Promise<string[]> {
+    if (!this.embeddingModel) {
+      throw new Error('Embedding model not initialized');
+    }
     
-    // The embedding is returned as a Float32Array in the first position
-    const flatQueryEmbedding = Array.from(queryEmbedding[0]);
+    const queryEmbedding = await this.embeddingModel(query, { pooling: 'mean', normalize: true });
+    const queryVectors = Array.from(queryEmbedding.data);
     
     // Calculate similarity for each document
     const similarities = documentEmbeddings.map(docEmbedding => {
-      return this._cosineSimilarity(flatQueryEmbedding, docEmbedding);
+      return cosineSimilarity(queryVectors, docEmbedding);
     });
     
     // Filter by threshold and get indices
@@ -263,10 +255,10 @@ export class TeapotAI {
 
   /**
    * Perform Retrieval-Augmented Generation (RAG) on a query
-   * @param {string} query - The query to retrieve context for
-   * @returns {Promise<string[]>} List of relevant document chunks
+   * @param query The query to retrieve context for
+   * @returns List of relevant document chunks
    */
-  async rag(query) {
+  async rag(query: string): Promise<string[]> {
     if (!this.settings.useRag || !this.documents.length) {
       return [];
     }
@@ -275,19 +267,24 @@ export class TeapotAI {
       await this._initializeEmbeddings();
     }
     
+    if (!this.documentEmbeddings || !this.embeddingModel) {
+      throw new Error('Document embeddings or embedding model not initialized');
+    }
+    
     return this._retrieval(query, this.documents, this.documentEmbeddings);
   }
 
   /**
    * Generate text using the model
-   * @param {string} inputText - The text input to generate from
-   * @returns {Promise<string>} The generated text
+   * @param inputText The text input to generate from
+   * @returns The generated text
    */
-  async generate(inputText) {
+  async generate(inputText: string): Promise<string> {
     const output = await this.model(inputText, { 
       max_new_tokens: this.settings.maxContextLength 
     });
     
+    if (!('generated_text' in output[0])) return "Error: Could not generate text.";
     const result = output[0]?.generated_text.trim() || "";
     
     if (this.settings.logLevel === "debug") {
@@ -300,12 +297,12 @@ export class TeapotAI {
 
   /**
    * Query the model with a question and optional context
-   * @param {string} query - The question to answer
-   * @param {string} [context=""] - Optional context to help answer the question
-   * @param {string} [systemPrompt=DEFAULT_SYSTEM_PROMPT] - The system prompt to use
-   * @returns {Promise<string>} The generated answer
+   * @param query The question to answer
+   * @param context Optional context to help answer the question
+   * @param systemPrompt The system prompt to use
+   * @returns The generated answer
    */
-  async query(query, context = "", systemPrompt = DEFAULT_SYSTEM_PROMPT) {
+  async query(query: string, context: string = "", systemPrompt: string = DEFAULT_SYSTEM_PROMPT): Promise<string> {
     let fullContext = context;
     
     if (this.settings.useRag) {
@@ -329,10 +326,10 @@ export class TeapotAI {
 
   /**
    * Chat with the model using a conversation history
-   * @param {ConversationMessage[]} conversationHistory - List of previous messages
-   * @returns {Promise<string>} The model's response
+   * @param conversationHistory List of previous messages
+   * @returns The model's response
    */
-  async chat(conversationHistory) {
+  async chat(conversationHistory: Message[]): Promise<string> {
     // Find the last user message
     const lastUserIndex = [...conversationHistory]
       .reverse()
@@ -362,12 +359,12 @@ export class TeapotAI {
 
   /**
    * Extract structured data from text based on a schema
-   * @param {Object} schema - The schema defining the data structure to extract
-   * @param {string} query - The query to extract data from
-   * @param {string} [context=""] - Optional context to help with extraction
-   * @returns {Promise<Object>} The extracted data
+   * @param schema The schema defining the data structure to extract
+   * @param query The query to extract data from
+   * @param context Optional context to help with extraction
+   * @returns The extracted data
    */
-  async extract(schema, query = "", context = "") {
+  async extract(schema: Schema, query: string = "", context: string = ""): Promise<Record<string, any>> {
     let extractionContext = context;
     
     if (this.settings.useRag) {
@@ -375,7 +372,7 @@ export class TeapotAI {
       extractionContext = contextDocuments.join('\n') + (context ? `\n${context}` : '');
     }
     
-    const result = {};
+    const result: Record<string, any> = {};
     
     for (const [fieldName, fieldInfo] of Object.entries(schema)) {
       const { type, description } = fieldInfo;
@@ -386,7 +383,7 @@ export class TeapotAI {
         extractionContext
       );
       
-      let parsedResult;
+      let parsedResult: string | number | boolean | null;
       
       if (type === 'boolean') {
         parsedResult = /\b(yes|true)\b/i.test(extractedValue) ? true : 

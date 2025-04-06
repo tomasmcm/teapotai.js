@@ -1,7 +1,18 @@
 import terser from "@rollup/plugin-terser";
 import { nodeResolve } from "@rollup/plugin-node-resolve";
+import typescript from "@rollup/plugin-typescript";
 
-const plugins = (browser) => [nodeResolve({ browser }), terser({ format: { comments: false } })];
+const plugins = (browser) => [
+  nodeResolve({ browser }),
+  typescript({ 
+    compilerOptions: {
+      outDir: './dist',
+      declarationMap: false,
+      declaration: false,
+    }
+  }),
+  terser({ format: { comments: false } })
+];
 
 const OUTPUT_CONFIGS = [
   // Node versions
@@ -34,7 +45,7 @@ const NODE_SPECIFIC_CONFIG = {
 export default OUTPUT_CONFIGS.map((output) => {
   const web = output.file.endsWith(".web.js");
   return {
-    input: "./src/teapotai.js",
+    input: "./src/teapotai.ts",
     output,
     plugins: plugins(web),
     ...(web ? WEB_SPECIFIC_CONFIG : NODE_SPECIFIC_CONFIG),
