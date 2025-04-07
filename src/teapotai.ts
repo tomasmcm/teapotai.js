@@ -8,7 +8,7 @@ import type {
   ProgressInfo,
   Text2TextGenerationPipeline,
 } from "@huggingface/transformers";
-import { cosineSimilarity } from "fast-cosine-similarity";
+import { cosineSimilarity } from "./cosine-similarity.js";
 
 const DEFAULT_LLM = "teapotai/teapotllm";
 const DEFAULT_EMBEDING_MODEL = "tomasmcm/teapotai-teapotembedding-onnx";
@@ -152,19 +152,18 @@ export class TeapotAI {
 
   /**
    * Initialize the embedding pipeline for RAG functionality
-   * @private
    */
-  private async initializeEmbeddings(documents): Promise<void> {
+  async initializeEmbeddings(documents): Promise<void> {
     // Process and chunk the documents
     if (documents && documents.length > 0) {
-      this.documents = documents.flatMap(doc => this._chunkDocument(doc));
+      this.documents = documents.flatMap(doc => this.chunkDocument(doc));
     }
 
     if (this.settings.verbose) {
       console.log("Initializing documents...");
     }
     
-    this.documentEmbeddings = await this._generateDocumentEmbeddings(this.documents);
+    this.documentEmbeddings = await this.generateDocumentEmbeddings(this.documents);
     
     if (this.settings.verbose) {
       console.log("Documents ready!");
@@ -176,7 +175,7 @@ export class TeapotAI {
    * @param context The document to chunk
    * @returns List of document chunks
    */
-  private _chunkDocument(context: string): string[] {
+  chunkDocument(context: string): string[] {
     if (!this.settings.contextChunking) {
       return [context];
     }
@@ -215,7 +214,7 @@ export class TeapotAI {
    * @param documents The documents to embed
    * @returns The document embeddings
    */
-  private async _generateDocumentEmbeddings(documents: string[]): Promise<number[][]> {
+  async generateDocumentEmbeddings(documents: string[]): Promise<number[][]> {
     if (this.settings.verbose) {
       console.log(`Generating embeddings for ${documents.length} documents...`);
     }
@@ -242,7 +241,7 @@ export class TeapotAI {
    * @param documentEmbeddings The embeddings for each document
    * @returns List of relevant documents
    */
-  private async _retrieval(query: string, documents: string[], documentEmbeddings: number[][]): Promise<string[]> {
+  async retrieval(query: string, documents: string[], documentEmbeddings: number[][]): Promise<string[]> {
     if (!this.embeddingModel) {
       throw new Error('Embedding model not initialized');
     }
@@ -281,7 +280,7 @@ export class TeapotAI {
       throw new Error('Document embeddings or embedding model not initialized');
     }
     
-    return this._retrieval(query, this.documents, this.documentEmbeddings);
+    return this.retrieval(query, this.documents, this.documentEmbeddings);
   }
 
   /**
@@ -321,10 +320,10 @@ export class TeapotAI {
     }
     
     if (this.settings.contextChunking && context) {
-      const documents = this._chunkDocument(context);
+      const documents = this.chunkDocument(context);
       if (documents.length > this.settings.ragNumResults) {
-        const documentEmbeddings = await this._generateDocumentEmbeddings(documents);
-        const ragDocuments = await this._retrieval(query, documents, documentEmbeddings);
+        const documentEmbeddings = await this.generateDocumentEmbeddings(documents);
+        const ragDocuments = await this.retrieval(query, documents, documentEmbeddings);
         fullContext = fullContext + '\n\n' + ragDocuments.join('\n\n');
       }
     }

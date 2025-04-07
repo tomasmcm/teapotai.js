@@ -1,0 +1,9 @@
+{
+  "name": "teapotai-examples",
+  "version": "1.0.0",
+  "description": "Example implementations of TeapotAI.js",
+  "private": true,
+  "dependencies": {
+    "langchain": "^0.3.20"
+  }
+}
