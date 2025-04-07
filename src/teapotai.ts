@@ -10,7 +10,7 @@ import type {
 } from "@huggingface/transformers";
 import { cosineSimilarity } from "fast-cosine-similarity";
 
-const DEFAULT_LLM = "tomasmcm/teapotai-teapotllm-onnx";
+const DEFAULT_LLM = "teapotai/teapotllm";
 const DEFAULT_EMBEDING_MODEL = "tomasmcm/teapotai-teapotembedding-onnx";
 const DEFAULT_SYSTEM_PROMPT = "You are Teapot, an open-source AI assistant optimized for low-end devices, providing short, accurate responses without hallucinating while excelling at information extraction and text summarization. If a user asks who you are reply \"I am Teapot\". When a user says 'you' they mean 'Teapot', so answer question from the perspective of Teapot.";
 
@@ -69,7 +69,6 @@ export class TeapotAI {
   constructor(
     llm: Text2TextGenerationPipeline,
     embeddingModel: FeatureExtractionPipeline,
-    documents: string[] = [],
     settings: TeapotAISettings = {}
   ) {
     this.llm = llm;
@@ -78,12 +77,12 @@ export class TeapotAI {
     
     // Apply default settings and override with provided settings
     this.settings = {
-      useRag: false,
+      useRag: true,
       ragNumResults: 3,
       ragSimilarityThreshold: 0.5,
       maxContextLength: 512,
       contextChunking: true,
-      verbose: false,
+      verbose: true,
       logLevel: "info",
       ...settings
     };
@@ -97,11 +96,6 @@ export class TeapotAI {
   |_|\\___|\\_,__| .__/ \\___/ \\__/  /_/   \\_\\___|      \\_____/
                |_|   
 `);
-    }
-
-    // Process and chunk the documents
-    if (documents && documents.length > 0) {
-      this.documents = documents.flatMap(doc => this._chunkDocument(doc));
     }
   }
 
@@ -124,23 +118,29 @@ export class TeapotAI {
     if (settings.verbose) {
       console.log("Loading model...");
     }
+
+    const teapotAI = new TeapotAI(undefined, undefined, settings);
+
     const [llm, embeddingModel] = await Promise.all([
       pipeline("text2text-generation", llmId, { 
         dtype, 
         device,
         progress_callback: progressCallback 
       }) as unknown as Text2TextGenerationPipeline,
-      pipeline("feature-extraction", embeddingModelId, {
-        dtype,
-        device,
-        progress_callback: progressCallback
-      }) as unknown as FeatureExtractionPipeline
+      (() => {
+        if (!teapotAI.settings.useRag) return null;
+        return pipeline("feature-extraction", embeddingModelId, {
+          dtype,
+          device,
+          progress_callback: progressCallback
+        }) as unknown as FeatureExtractionPipeline
+      })()
     ]);
+    teapotAI.llm = llm;
 
-    const teapotAI = new TeapotAI(llm, embeddingModel, documents, settings);
-
-    if (teapotAI.settings.useRag) {
-      await teapotAI._initializeEmbeddings();
+    if (teapotAI.settings.useRag && embeddingModel) {
+      teapotAI.embeddingModel = embeddingModel;
+      await teapotAI.initializeEmbeddings(documents);
     }
     
     if (settings.verbose) {
@@ -154,8 +154,11 @@ export class TeapotAI {
    * Initialize the embedding pipeline for RAG functionality
    * @private
    */
-  private async _initializeEmbeddings(): Promise<void> {
-    if (this.documents.length === 0) return;
+  private async initializeEmbeddings(documents): Promise<void> {
+    // Process and chunk the documents
+    if (documents && documents.length > 0) {
+      this.documents = documents.flatMap(doc => this._chunkDocument(doc));
+    }
 
     if (this.settings.verbose) {
       console.log("Initializing documents...");
@@ -272,10 +275,6 @@ export class TeapotAI {
   async rag(query: string): Promise<string[]> {
     if (!this.settings.useRag || !this.documents.length) {
       return [];
-    }
-    
-    if (!this.documentEmbeddings) {
-      await this._initializeEmbeddings();
     }
     
     if (!this.documentEmbeddings || !this.embeddingModel) {

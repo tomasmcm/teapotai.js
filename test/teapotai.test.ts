@@ -7,6 +7,7 @@ describe('TeapotAI', () => {
   beforeEach(async () => {
     teapot = await TeapotAI.fromPretrained({
       settings: {
+        useRag: false,
         verbose: true
       }
     });

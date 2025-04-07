@@ -51,7 +51,9 @@ const data = await teapot.extract(schema, "John is a 25-year-old student");
 ## Advanced Configuration
 
 ```javascript
-const teapot = await TeapotAI.fromPretrained("tomasmcm/teapotai-teapotllm-onnx", {
+const teapot = await TeapotAI.fromPretrained({
+  llmId: "teapotai/teapotllm",
+  embeddingModelId: "tomasmcm/teapotai-teapotembedding-onnx",
   documents: ["Some context document", "Another document"],
   settings: {
     useRag: true,
@@ -60,7 +62,7 @@ const teapot = await TeapotAI.fromPretrained("tomasmcm/teapotai-teapotllm-onnx",
     maxContextLength: 512,
     contextChunking: true,
     verbose: true,
-    logLevel: "debug"
+    logLevel: "info"
   },
   dtype: "q4",
   device: "webgpu"
@@ -73,9 +75,10 @@ const teapot = await TeapotAI.fromPretrained("tomasmcm/teapotai-teapotllm-onnx",
 
 #### Static Methods
 
-- `fromPretrained(modelId?, options?)`: Creates a new TeapotAI instance with the specified model
-  - `modelId`: Optional model ID (default: "tomasmcm/teapotai-teapotllm-onnx")
+- `fromPretrained(options?)`: Creates a new TeapotAI instance with the specified model
   - `options`: Configuration options including:
+    - `llmId`: Optional model ID (default: "teapotai/teapotllm")
+    - `embeddingModelId`: Optional embedding model ID (default: "tomasmcm/teapotai-teapotembedding-onnx")
     - `documents`: Array of documents for RAG
     - `settings`: TeapotAI settings
     - `dtype`: Model data type (e.g., "q4", "fp16")
