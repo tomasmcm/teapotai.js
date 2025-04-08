@@ -4,6 +4,8 @@
   "description": "Example implementations of TeapotAI.js",
   "private": true,
   "dependencies": {
+    "@langchain/community": "^0.3.39",
+    "@langchain/core": "^0.3.43",
     "langchain": "^0.3.20"
   }
 }

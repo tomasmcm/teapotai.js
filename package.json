@@ -30,8 +30,7 @@
   "license": "Apache-2.0",
   "description": "AI powered LLM agents, privately brewed in your browser.",
   "dependencies": {
-    "@huggingface/transformers": "^3.4.2",
-    "fast-cosine-similarity": "^1.2.2"
+    "@huggingface/transformers": "^3.4.2"
   },
   "devDependencies": {
     "@rollup/plugin-node-resolve": "^16.0.0",

@@ -1,29 +1,11 @@
 // Vector store example with TeapotAI for Node.js using LangChain's MemoryVectorStore
-const { TeapotAI } = require('../../dist/teapotai.cjs');
-// Import MemoryVectorStore from LangChain
+const { TeapotAI } = require('../dist/teapotai.cjs');
+const { HuggingFaceTransformersEmbeddings } = require("@langchain/community/embeddings/huggingface_transformers");
 const { MemoryVectorStore } = require('langchain/vectorstores/memory');
-// Custom embeddings class to interface with TeapotAI
-class TeapotEmbeddings {
-  constructor(teapotInstance) {
-    this.teapot = teapotInstance;
-  }
-
-  // LangChain expects this method for generating embeddings for documents
-  async embedDocuments(documents) {
-    return await this.teapot.generateDocumentEmbeddings(documents);
-  }
-  
-  // LangChain expects this method for generating query embeddings
-  async embedQuery(query) {
-    return (await this.teapot.generateDocumentEmbeddings([query]))[0];
-  }
-}
 
 async function main() {
   try {
-    console.log("Initializing TeapotAI for vector store example...");
-    
-    // Example documents for knowledge retrieval, same as RAG example
+    // Example documents for knowledge retrieval
     const documents = [
       "The Eiffel Tower is located in Paris, France. It was built in 1889 and stands 330 meters tall.",
       "The Great Wall of China is a historic fortification that stretches over 13,000 miles.",
@@ -33,27 +15,29 @@ async function main() {
       "The Amazon Rainforest is the largest tropical rainforest in the world, covering over 5.5 million square kilometers."
     ];
     
-    // Initialize TeapotAI with default settings (no documents)
-    const teapot = await TeapotAI.fromPretrained({
-      settings: {
-        useRag: true,
-        contextChunking: false,
-        verbose: true,
-      }
-    });
-    
-    console.log("Creating embeddings adapter for LangChain...");
-    
-    // Initialize the MemoryVectorStore with our TeapotAI embeddings
+    // Initialize the MemoryVectorStore
     console.log("Initializing MemoryVectorStore with documents...");
+    const model = new HuggingFaceTransformersEmbeddings({
+      model: "Xenova/all-MiniLM-L6-v2"
+    });
+
     const vectorStore = await MemoryVectorStore.fromTexts(
       documents,
       { id: 1, name: 'test' }, // Metadata for each document (could be more specific)
-      new TeapotEmbeddings(teapot)
+      model
     );
     
     console.log(`Added ${documents.length} documents to MemoryVectorStore.`);
     console.log("\nVector store setup complete!");
+
+    // Initialize TeapotAI with default settings (no documents)
+    const teapot = await TeapotAI.fromPretrained({
+      settings: {
+        useRag: false,
+        contextChunking: true,
+        verbose: true,
+      }
+    });
     
     // Example query
     const question = "What landmark was constructed in the 1800s?";

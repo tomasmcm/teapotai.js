@@ -156,7 +156,8 @@ export class TeapotAI {
   async initializeEmbeddings(documents): Promise<void> {
     // Process and chunk the documents
     if (documents && documents.length > 0) {
-      this.documents = documents.flatMap(doc => this.chunkDocument(doc));
+      const chunksPromises = await Promise.all(documents.map(doc => this.chunkDocument(doc)));
+      this.documents = chunksPromises.flat();
     }
 
     if (this.settings.verbose) {
@@ -173,36 +174,38 @@ export class TeapotAI {
   /**
    * Split a document into smaller chunks if needed
    * @param context The document to chunk
+   * @param query Optional query for context-aware chunking
    * @returns List of document chunks
    */
-  chunkDocument(context: string): string[] {
+  async chunkDocument(context: string, query: string = ''): Promise<string[]> {
     if (!this.settings.contextChunking) {
       return [context];
     }
 
-    const tokenized = this.llm.tokenizer(context);
-    const maxLength = 512;
+    const [contextTokens, queryTokens] = await this.generateDocumentTokens([context, query]);
+    const maxLength = this.settings.maxContextLength - queryTokens.length;
 
-    if (tokenized.input_ids.length <= maxLength) {
+    if (contextTokens.length <= maxLength) {
       return [context];
     }
 
     // Chunk by paragraphs
     const paragraphs = context.split('\n\n');
     const documents: string[] = [];
+    const paragraphTokens = await this.generateDocumentTokens(paragraphs);
 
-    for (const paragraph of paragraphs) {
-      const tokens = this.llm.tokenizer(paragraph).input_ids;
+    for (let i = 0; i < paragraphs.length; i++) {
+      const tokens = paragraphTokens[i];
       
       if (tokens.length > maxLength) {
         // Further chunk long paragraphs
         for (let i = 0; i < tokens.length; i += maxLength) {
           const chunkTokens = tokens.slice(i, i + maxLength);
-          const chunkText = this.llm.tokenizer.decode(chunkTokens, { skip_special_tokens: true });
+          const chunkText = await this.llm.tokenizer.decode(chunkTokens, { skip_special_tokens: true });
           documents.push(chunkText);
         }
       } else {
-        documents.push(paragraph);
+        documents.push(paragraphs[i]);
       }
     }
     
@@ -232,6 +235,30 @@ export class TeapotAI {
     }
     
     return embeddings;
+  }
+
+  /**
+   * Generate token lengths for a list of documents
+   * @param documents The documents to tokenize
+   * @returns The document tokens
+   */
+  async generateDocumentTokens(documents: string[]): Promise<number[][]> {
+    if (this.settings.verbose) {
+      console.log(`Tokenizing ${documents.length} documents...`);
+    }
+    
+    if (!this.llm?.tokenizer) {
+      throw new Error('Tokenizer not initialized');
+    }
+    
+    const tokenizedDocuments: number[][] = [];
+    
+    for (const document of documents) {
+      const tokenized = await this.llm.tokenizer(document);
+      tokenizedDocuments.push(Array.from(tokenized.input_ids.data));
+    }
+    
+    return tokenizedDocuments;
   }
 
   /**
@@ -320,8 +347,8 @@ export class TeapotAI {
     }
     
     if (this.settings.contextChunking && context) {
-      const documents = this.chunkDocument(context);
-      if (documents.length > this.settings.ragNumResults) {
+      const documents = await this.chunkDocument(context, query);
+      if (this.settings.useRag && documents.length > this.settings.ragNumResults) {
         const documentEmbeddings = await this.generateDocumentEmbeddings(documents);
         const ragDocuments = await this.retrieval(query, documents, documentEmbeddings);
         fullContext = fullContext + '\n\n' + ragDocuments.join('\n\n');

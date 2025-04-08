@@ -712,11 +712,6 @@ expect-type@^1.1.0:
   resolved "https://registry.yarnpkg.com/expect-type/-/expect-type-1.2.1.tgz#af76d8b357cf5fa76c41c09dafb79c549e75f71f"
   integrity sha512-/kP8CAwxzLVEeFrMm4kMmy4CCDlpipyA7MYLVrdJIkV0fYF0UaigQHRsxHiuY/GEea+bh4KSv3TIlgr+2UL6bw==
 
-fast-cosine-similarity@^1.2.2:
-  version "1.2.2"
-  resolved "https://registry.yarnpkg.com/fast-cosine-similarity/-/fast-cosine-similarity-1.2.2.tgz#1bb5b361fa14327c417886ea3e2d4a52273f0f23"
-  integrity sha512-VAAswiN4WOjvkbqSTXfatw+zKclDN9h2R3Si1pFoZSLd1jHjXizaOr1LLip7bI69IRcbyhOPQ3CjL5WfvHx2gg==
-
 flatbuffers@^25.1.24:
   version "25.2.10"
   resolved "https://registry.yarnpkg.com/flatbuffers/-/flatbuffers-25.2.10.tgz#308b750545f62db670ca4c9d7dbc66161420a95e"
